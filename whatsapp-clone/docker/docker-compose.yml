@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+
+  # ── MySQL Database ────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: chatapp-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: chatapp
+      MYSQL_USER: chatuser
+      MYSQL_PASSWORD: chatpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docs/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./docs/sample-data.sql:/docker-entrypoint-initdb.d/02-sample-data.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chatapp-net
+
+  # ── Spring Boot Backend ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chatapp-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: chatapp
+      DB_USERNAME: chatuser
+      DB_PASSWORD: chatpassword
+      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      JWT_EXPIRATION: 86400000
+      JWT_REFRESH_EXPIRATION: 604800000
+      SERVER_PORT: 8080
+      FILE_UPLOAD_DIR: /app/uploads
+      ALLOWED_ORIGINS: http://localhost:3000,http://frontend:3000
+    ports:
+      - "8080:8080"
+    volumes:
+      - upload_data:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - chatapp-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── React Frontend ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chatapp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:8080/api
+      VITE_WS_URL: http://localhost:8080/api/ws
+    ports:
+      - "3000:80"
+    networks:
+      - chatapp-net
+
+  # ── Redis (optional – for session / pub-sub scaling) ─────────────────────
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: chatapp-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - chatapp-net
+
+volumes:
+  mysql_data:
+  upload_data:
+
+networks:
+  chatapp-net:
+    driver: bridge

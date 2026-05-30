@@ -1,0 +1,15 @@
+{
+  "name": "whatsapp-clone-root",
+  "version": "1.0.0",
+  "description": "Root package.json to run both frontend and backend concurrently",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "cd frontend && npm run dev",
+    "start:backend": "cd backend && mvn spring-boot:run",
+    "install:frontend": "cd frontend && npm install",
+    "setup": "npm install && npm run install:frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
